@@ -11,7 +11,7 @@ plt.rcParams.update({
     "axes.facecolor": '#373e4b',
 })
 
-G, M, t, r, theta, phi, k, c = smp.symbols('G M t r θ Φ k c')
+G, M, t, r, theta, phi, k, c = smp.symbols('G M t r θ Φ k c', nonzero=True)
 a = smp.Function('a')
 a_dot = smp.Function('ȧ')
 a_dot = smp.Function('ȧ')
@@ -86,7 +86,7 @@ FLRW = smp.nsimplify(FLRW)
 #########################################################################################################################################
 
 # Compute Christoffel Symbols
-# Compute Christoffel Symbols
+
 def Christoffel_Symbols(m, i, j, Metric):
     inv_Metric = Metric.inv()
     C = 0
