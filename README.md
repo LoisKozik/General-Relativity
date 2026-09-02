@@ -15,3 +15,6 @@ This project requires the following Python packages:
 # Exemples
 ### Project 1 : Derivation of the Friedmann Equations
 This script derive the Friedmann equations using the General Relativity library from the FLRW metric.
+
+### Project 2 : Schwarszchild Metric
+This script verifies that the Schwarzschild metric is a valid solution to the Einstein field equation.
