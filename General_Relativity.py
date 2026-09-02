@@ -221,7 +221,6 @@ def Display_Ricci_Scalar(Metric):
     for mu in range(4):
         for nu in range(4):
             ricci_scalar += (Metric.inv())[mu,nu] * All_Ri[mu,nu]
-    
     display(Latex('$' + latex(Riemann) + ' = ' + latex(smp.simplify(ricci_scalar).subs([ (smp.diff(a(t),t,2), a_Dot(t)) , (smp.diff(a(t),t), a_dot(t)) ]) ) + '$'))
 
 
