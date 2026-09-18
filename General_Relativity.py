@@ -3,7 +3,7 @@ import sympy as smp
 from sympy import *
 from IPython.display import display, Latex
 import matplotlib.pyplot as plt
-import plotly.graph_objs as go
+#import plotly.graph_objs as go
 
 plt.style.use('dark_background')
 plt.rcParams.update({
@@ -11,7 +11,7 @@ plt.rcParams.update({
     "axes.facecolor": '#373e4b',
 })
 
-G, M, t, r, theta, phi, k, c = smp.symbols('G M t r θ Φ k c', nonzero=True)
+G, M, t, r, theta, phi, k, c = smp.symbols('G M t r θ Φ k c', nonzero=True, real=True, positive=True)
 a = smp.Function('a')
 a_dot = smp.Function('ȧ')
 a_dot = smp.Function('ȧ')
@@ -42,6 +42,9 @@ k_constant = 8*np.pi*G_constant/c_constant**4 #m/J
 
 def R_s(m):
     return 2*G*m/c_constant**2
+
+def Subs(expr):
+    return smp.simplify(expr).subs([ (smp.diff(a(t),t,2), a_Dot(t)) , (smp.diff(a(t),t), a_dot(t)) ])
 
 #########################################################################################################################################
 #                                                           METRICS                                                                     #
@@ -80,149 +83,136 @@ FLRW[3,3] = -a(t)**2*r**2*smp.sin(theta)**2
 
 FLRW = smp.nsimplify(FLRW)
 
-
 #########################################################################################################################################
 #                                                           COMPUTE                                                                     #
 #########################################################################################################################################
 
 # Compute Christoffel Symbols
 
-def Christoffel_Symbols(m, i, j, Metric):
+def Christoffel_Symbols(Metric):
     inv_Metric = Metric.inv()
-    C = 0
-    for l in range(4):
-        C += 1/2*inv_Metric[Var[m], l]*(smp.diff(Metric[Var[i],l], j)+smp.diff(Metric[l,Var[j]], i)-smp.diff(Metric[Var[j],Var[i]], Rav[l]))
-    return smp.nsimplify(C)
-
-# Compute all Christoffel Symbols
-def All_Christoffel_Symbols(Metric):
-    All_C = np.zeros((4,4,4), dtype=object)
-    
+    Gamma = np.zeros((4,4,4), dtype=object)
     for k in range(4):
         for i in range(4):
             for j in range(4):
-                c = Christoffel_Symbols(Rav[k], Rav[i], Rav[j], Metric)
-                if c != 0 :
-                    All_C[k,i,j] = smp.nsimplify(c)
-                    #display(Latex('$' + latex(Gamma[Rav[i],Rav[j]]**Rav[k]) + ' = ' + latex(c) + '$'))
-    
-    return All_C
+                S = 0
+                for l in range(4):
+                    partial1 = smp.diff(Metric[i,l], Rav[j])
+                    partial2 = smp.diff(Metric[l,j], Rav[i])
+                    partial3 = smp.diff(Metric[j,i], Rav[l])
+                    G = 1/2 * inv_Metric[k,l] * (partial1 + partial2 - partial3)
+                    S += G
+                Gamma[k,i,j] = smp.nsimplify(S)
+    return Gamma
 
+# Compute the Riemann Curvature Tensor
 
-
-# Compute Riemann Tensor component
-def Rie(alpha, beta, mu, nu, Metric, All_C):
-    G1 = 0
-    G2 = 0
-    
-    for k in (t,r,theta,phi):
-        All_C
-        G1 += All_C[Var[alpha], Var[mu], Var[k]] * All_C[Var[k], Var[beta], Var[nu]]
-        G2 += All_C[Var[alpha], Var[nu], Var[k]] * All_C[Var[k], Var[beta], Var[mu]]
-        
-    return smp.simplify(smp.diff(All_C[Var[alpha], Var[beta], Var[nu]], mu) - smp.diff(All_C[Var[alpha], Var[beta], Var[mu]], nu) + G1 - G2)
-
-# Compute all Riemann Tensor components
-def All_Riemann(Metric):
-    All_C = All_Christoffel_Symbols(Metric)
-    All_R = np.zeros((4,4,4,4), dtype=object)
+def Riemann_Tensor(Metric, cs=None):
+    R = np.zeros((4,4,4,4), dtype=object)
+    if cs is not None:
+        Gamma = cs
+    else:
+        Gamma = Christoffel_Symbols(Metric)
     
     for i in range(4):
         for j in range(4):
             for l in range(4):
                 for m in range(4):
-                    R = Rie(Rav[i], Rav[j], Rav[l], Rav[m], Metric, All_C)
-                    if R != 0 :
-                        All_R[i,j,l,m] = R
-                        #display(Latex('$' + latex(Riemann[Rav[j],Rav[l],Rav[m]]**Rav[i]) + ' = ' + latex(R) + '$'))
-    return All_R
+                    s = 0
+                    partial1 = smp.diff(Gamma[i,j,m],Rav[l])
+                    partial2 = smp.diff(Gamma[i,j,l], Rav[m])
+                    for k in range(4):
+                        s += smp.nsimplify(Gamma[i,l,k]*Gamma[k,j,m] - Gamma[i,m,k]*Gamma[k,j,l])
+                    R[i,j,l,m] = smp.simplify(partial1 - partial2 + s)
+    return R
 
+# Compute the Ricci Tensor
 
+def Ricci_Tensor(Metric, R=None):
+    Ric = np.zeros((4,4), dtype=object)
+    if R is not None:
+        R_tensor = R
+    else:
+        R_tensor = Riemann_Tensor(Metric)
+        
+    for i in range(4):
+        for j in range(4):
+            s = 0
+            for k in range(4):
+                s += R_tensor[k,i,k,j]
+            Ric[i,j] = smp.simplify(s)
+    return Ric
 
-# Compute Ricci tensor components
-def Ricci(mu,nu,Metric,All_R):
-    Ri = 0
-    for alpha in (t,r,theta,phi):
-        Ri += All_R[Var[alpha],Var[mu],Var[alpha],Var[nu]]
-    return smp.simplify(Ri)
+# Compute the Ricci Scalar
 
-# Compute all Ricci tensor components
-def All_Ricci(Metric):
-    All_R = All_Riemann(Metric)
-    All_Ri = np.zeros((4,4), dtype=object)
-
-    for mu in range(4):
-        for nu in range(4):
-            Ri = Ricci(Rav[mu],Rav[nu],Metric,All_R)
-            if Ri != 0:
-                All_Ri[mu,nu] = Ri
-                #display(Latex('$' + latex(Riemann[Rav[mu],Rav[nu]]) + ' = ' + latex(Ri.subs([ (smp.diff(a(t),t,2), a_Dot(t)) , (smp.diff(a(t),t), a_dot(t)) ]) ) + '$'))
-    return All_Ri
-
-# Compute Ricci Scalar
-def Ricci_Scalar(Metric):
-    All_Ri = All_Ricci(Metric)
-    ricci_scalar = 0
-    for mu in range(4):
-        for nu in range(4):
-            ricci_scalar += (Metric.inv())[mu,nu] * All_Ri[mu,nu]
+def Ricci_Scalar(Metric, R=None):
+    if R is not None:
+        R_tensor = R
+    else:
+        R_tensor = Riemann_Tensor(Metric)
+    Ric = Ricci_Tensor(Metric,R_tensor)
     
-    #display(Latex('$' + latex(Riemann) + ' = ' + latex(smp.simplify(ricci_scalar).subs([ (smp.diff(a(t),t,2), a_Dot(t)) , (smp.diff(a(t),t), a_dot(t)) ]) ) + '$'))
-    return smp.simplify(ricci_scalar)
+    Scal = 0
+    for i in range(4):
+        for j in range(4):
+            Scal += (Metric.inv())[i,j] * Ric[i,j]
+    return Scal
+
 
 #########################################################################################################################################
 #                                                            DIPLAY                                                                     #
 #########################################################################################################################################
 
-# Display all Christoffel Symbols
-def Display_Christoffel_Symbols(Metric):
-    All_C = np.zeros((4,4,4), dtype=object)
-    
-    for k in range(4):
-        for i in range(4):
-            for j in range(4):
-                c = Christoffel_Symbols(Rav[k], Rav[i], Rav[j], Metric)
-                if c != 0 :
-                    All_C[k,i,j] = smp.nsimplify(c)
-                    display(Latex('$' + latex(Gamma[Rav[i],Rav[j]]**Rav[k]) + ' = ' + latex(smp.simplify(c)) + '$'))
+def Display_Christoffel_Symbols(Metric, cs=None):
+    if cs is not None:
+        G = cs
+    else:
+        G = Christoffel_Symbols(Metric)
+    for i in range(4):
+        for j in range(4):
+            for k in range(4):
+                g = smp.nsimplify(G[i,j,k])
+                if g != 0:
+                    #print(g)
+                    display(Latex('$' + latex(Gamma[Rav[i],Rav[j]]**Rav[k]) + ' = ' + latex(Subs(g)) + '$'))
 
 
-# Display all Riemann Tensor components
-def Display_Riemann(Metric):
-    All_C = All_Christoffel_Symbols(Metric)
-    All_R = np.zeros((4,4,4,4), dtype=object)
+def Display_Riemann_Tensor(Metric, R=None):
+    if R is not None:
+        R_tensor = R
+    else:
+        R_tensor = Riemann_Tensor(Metric)
     
     for i in range(4):
         for j in range(4):
             for l in range(4):
                 for m in range(4):
-                    R = Rie(Rav[i], Rav[j], Rav[l], Rav[m], Metric, All_C)
-                    if R != 0 :
-                        All_R[i,j,l,m] = R
-                        display(Latex('$' + latex(Riemann[Rav[j],Rav[l],Rav[m]]**Rav[i]) + ' = ' + latex(R) + '$'))
+                    r = smp.simplify(R_tensor[i,j,l,m])
+                    if r != 0 :
+                        display(Latex('$' + latex(Riemann[Rav[j],Rav[l],Rav[m]]**Rav[i]) + ' = ' + latex(Subs(r)) + '$'))
 
 
-# Display all Ricci tensor components
-def Display_Ricci(Metric):
-    All_R = All_Riemann(Metric)
-    All_Ri = np.zeros((4,4), dtype=object)
+def Display_Ricci_Tensor(Metric, R=None):
+    if R is not None:
+        R_tensor = R
+    else:
+        R_tensor = Riemann_Tensor(Metric)
+    Ric = Ricci_Tensor(Metric,R_tensor)
+    
+    for i in range(4):
+        for j in range(4):
+            ric = smp.simplify(Ric[i,j])
+            if ric != 0:
+                display(Latex('$' + latex(Riemann[Rav[i],Rav[j]]) + ' = ' + latex(Subs(ric)) + '$'))
+ 
 
-    for mu in range(4):
-        for nu in range(4):
-            Ri = Ricci(Rav[mu],Rav[nu],Metric,All_R)
-            if Ri != 0:
-                All_Ri[mu,nu] = Ri
-                display(Latex('$' + latex(Riemann[Rav[mu],Rav[nu]]) + ' = ' + latex(Ri.subs([ (smp.diff(a(t),t,2), a_Dot(t)) , (smp.diff(a(t),t), a_dot(t)) ]) ) + '$'))
-
-# Display Ricci Scalar
-def Display_Ricci_Scalar(Metric):
-    All_Ri = All_Ricci(Metric)
-    ricci_scalar = 0
-    for mu in range(4):
-        for nu in range(4):
-            ricci_scalar += (Metric.inv())[mu,nu] * All_Ri[mu,nu]
-    display(Latex('$' + latex(Riemann) + ' = ' + latex(smp.simplify(ricci_scalar).subs([ (smp.diff(a(t),t,2), a_Dot(t)) , (smp.diff(a(t),t), a_dot(t)) ]) ) + '$'))
-
+def Display_Ricci_Scalar(Metric, R=None):
+    if R is not None:
+        R_tensor = R
+    else:
+        R_tensor = Riemann_Tensor(Metric)
+    Scal = Ricci_Scalar(Metric,R_tensor)
+    display(Latex('$' + latex(Riemann) + ' = ' + latex(Subs(Scal)) + '$'))
 
 #########################################################################################################################################
 #                                                          Trajectory                                                                   #
